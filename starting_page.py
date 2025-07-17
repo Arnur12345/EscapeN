@@ -20,7 +20,7 @@ class StartingPage:
             self.background = pygame.Surface((WIDTH, HEIGHT))
             self.background.fill((50, 50, 50))
         
-        # Load button image
+        # Load button image for reference (but make it invisible)
         try:
             self.button_image = pygame.image.load("button.png")
             print("Button image loaded successfully")
@@ -34,10 +34,15 @@ class StartingPage:
             text_rect = text.get_rect(center=self.button_image.get_rect().center)
             self.button_image.blit(text, text_rect)
         
-        # Button properties
-        self.button_rect = self.button_image.get_rect()
-        # Center the button on screen
-        self.button_rect.center = (WIDTH // 2, HEIGHT // 2 + 200)
+        # Button properties (invisible clickable area)
+        # Create rectangle button area: from (645, 459) to (1288, 704)
+        button_width = 1288 - 645  # 643 pixels wide
+        button_height = 704 - 459  # 245 pixels tall
+        self.button_rect = pygame.Rect(645, 459, button_width, button_height)
+        
+        # Create invisible button surface
+        self.invisible_button = pygame.Surface((button_width, button_height))
+        self.invisible_button.set_alpha(0)  # Make it completely transparent
         
         # Button state
         self.button_hovered = False
@@ -65,18 +70,9 @@ class StartingPage:
         # Draw background
         self.screen.blit(self.background, (0, 0))
         
-        # Draw button with hover effect
-        button_to_draw = self.button_image
-        if self.button_hovered:
-            # Create a slightly brighter version for hover effect
-            button_to_draw = self.button_image.copy()
-            # Add a subtle brightness increase
-            overlay = pygame.Surface(button_to_draw.get_size())
-            overlay.fill((30, 30, 30))
-            overlay.set_alpha(100)
-            button_to_draw.blit(overlay, (0, 0), special_flags=pygame.BLEND_ADD)
-        
-        self.screen.blit(button_to_draw, self.button_rect)
+        # Draw invisible button (no visual representation)
+        # The button area is still clickable but not visible
+        self.screen.blit(self.invisible_button, self.button_rect)
         
         # Update display
         pygame.display.flip()

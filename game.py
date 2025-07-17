@@ -4,7 +4,7 @@ from constants import WIDTH, HEIGHT, BG_WIDTH, BG_HEIGHT, FPS, WHITE, LIGHT_RADI
 from utils import set_polygon_boundaries
 from camera import Camera
 from character import Character
-from asselya import Asselya
+# from asselya import Asselya  # Temporarily disabled for safe environment
 from npc import NPC
 
 class Game:
@@ -18,17 +18,30 @@ class Game:
         self.game_over_timer = 0
         self.flicker_timer = 0
         
+        # Fade-in effect
+        self.fade_alpha = 255  # Start with black screen
+        self.fade_speed = 3    # Speed of fade-in
+        self.fade_surface = pygame.Surface((WIDTH, HEIGHT))
+        self.fade_surface.fill((0, 0, 0))  # Black surface
+        
+        # Door coordinates (scaled for 1920x1080)
+        self.door_x1 = 1800 * 1.5  # 2700
+        self.door_y = 815 * 1.5    # 1222.5
+        self.door_x2 = 2070 * 1.5  # 3105
+        self.door_width = self.door_x2 - self.door_x1  # 405
+        self.door_height = 50  # Door height for collision detection
+        
         # Create darkness overlay surface
         self.darkness_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         
-        # Load background
+        # Load main background
         try:
             original_bg = pygame.image.load("sprites/bg.png")
             # Scale background proportionally for 1920x1080 (1.5x scaling)
             self.background = pygame.transform.scale(original_bg, (BG_WIDTH, BG_HEIGHT))
-            print(f"Background loaded and scaled: {self.background.get_size()}")
+            print(f"Main background loaded and scaled: {self.background.get_size()}")
         except pygame.error as e:
-            print(f"Could not load background: {e}")
+            print(f"Could not load main background: {e}")
             # Create a simple gradient background as fallback
             self.background = pygame.Surface((BG_WIDTH, BG_HEIGHT))
             for y in range(BG_HEIGHT):
@@ -94,8 +107,8 @@ class Game:
         start_y = 1800  # Between the walls
         self.character = Character(start_x, start_y)
         
-        # Create Asselya (following NPC) at her base position
-        self.asselya = Asselya(3200, 1600, "asselya/standing/")
+        # Create Asselya (following NPC) at her base position - DISABLED
+        # self.asselya = Asselya(3200, 1600, "asselya/standing/")
         
         # Create stationary NPC (Bernar) to the left of spawn point
         self.npc = NPC(start_x - 150, start_y, "npc/bernar/bernar", 75, 5)
@@ -104,14 +117,37 @@ class Game:
         self.bakhredin = NPC(start_x + 150, start_y, "npc/bakhredin/bahr", 90, 7)
     
     def check_collision(self):
-        """Check if Asselya caught the player"""
-        distance = self.get_asselya_distance()
+        """Check if Asselya caught the player - DISABLED"""
+        # Asselya collision disabled for safe environment
+        return False
         
-        # If Asselya is very close to player (caught)
-        if distance < 30:  # Collision threshold
-            self.game_over = True
+    def check_door_collision(self):
+        """Check if player is touching the door"""
+        # Check if player is within door area
+        player_x = self.character.world_x + self.character.width // 2
+        player_y = self.character.world_y + self.character.height // 2
+        
+        if (self.door_x1 <= player_x <= self.door_x2 and 
+            self.door_y <= player_y <= self.door_y + self.door_height):
             return True
         return False
+        
+    def teleport_to_lection(self):
+        """Teleport player to lection hall (separate game environment)"""
+        print("Teleporting to lection hall...")
+        
+        # Import and start the lection game
+        from lection_game import LectionGame
+        
+        # Quit current pygame instance
+        pygame.quit()
+        
+        # Initialize pygame again for lection game
+        pygame.init()
+        
+        # Start lection game
+        lection_game = LectionGame()
+        lection_game.run()
     
     def draw_game_over_screen(self):
         """Draw game over screen"""
@@ -145,6 +181,9 @@ class Game:
         self.game_over_timer = 0
         self.flicker_timer = 0
         
+        # Reset fade-in effect
+        self.fade_alpha = 255
+        
         # Reset character position
         start_x = BG_WIDTH // 2
         start_y = 1800
@@ -152,13 +191,13 @@ class Game:
         self.character.world_y = start_y
         self.character.is_running = False
         
-        # Reset Asselya position to base
-        self.asselya.world_x = self.asselya.base_x
-        self.asselya.world_y = self.asselya.base_y
-        self.asselya.wait_timer = 0
-        self.asselya.is_following = False
-        self.asselya.is_running = False
-        self.asselya.returning_to_base = False
+        # Reset Asselya position to base - DISABLED
+        # self.asselya.world_x = self.asselya.base_x
+        # self.asselya.world_y = self.asselya.base_y
+        # self.asselya.wait_timer = 0
+        # self.asselya.is_following = False
+        # self.asselya.is_running = False
+        # self.asselya.returning_to_base = False
         
         # Reset stationary NPCs positions
         self.npc.world_x = start_x - 150
@@ -170,47 +209,16 @@ class Game:
         self.camera.update(self.character.world_x, self.character.world_y)
     
     def get_asselya_distance(self):
-        """Get distance between player and Asselya"""
-        dx = self.character.world_x - self.asselya.world_x
-        dy = self.character.world_y - self.asselya.world_y
-        return (dx**2 + dy**2)**0.5
+        """Get distance between player and Asselya - DISABLED"""
+        # Asselya disabled for safe environment
+        return 1000  # Return large distance to disable effects
     
     def apply_flicker_effect(self):
-        """Apply screen flicker effect based on Asselya proximity"""
-        distance = self.get_asselya_distance()
+        """Apply screen flicker effect based on Asselya proximity - DISABLED"""
+        # Asselya disabled for safe environment
+        return
         
-        # Only flicker when Asselya is following (after wait period)
-        if not self.asselya.is_following:
-            return
-        
-        # Calculate flicker intensity based on distance
-        max_flicker_distance = 500  # Distance at which flickering starts
-        min_flicker_distance = 50   # Distance at which flickering is most intense
-        
-        if distance > max_flicker_distance:
-            return  # No flicker if too far
-        
-        # Calculate intensity (0.0 to 1.0)
-        if distance < min_flicker_distance:
-            intensity = 1.0
-        else:
-            intensity = 1.0 - (distance - min_flicker_distance) / (max_flicker_distance - min_flicker_distance)
-        
-        # Update flicker timer
-        self.flicker_timer += 1
-        
-        # Calculate flicker frequency based on intensity
-        flicker_speed = int(20 - (intensity * 15))  # Faster flicker when closer
-        if flicker_speed < 2:
-            flicker_speed = 2
-        
-        # Create flicker effect
-        if self.flicker_timer % flicker_speed < flicker_speed // 2:
-            # Create red flicker overlay
-            flicker_alpha = int(intensity * 100)  # Max alpha of 100
-            flicker_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            flicker_surface.fill((255, 255, 255, flicker_alpha))  # Red flicker
-            self.screen.blit(flicker_surface, (0, 0))
+        # All flicker effect code disabled
         
     def draw_polygon_boundaries(self, screen):
         """Draw polygon boundaries (optional - for debugging)"""
@@ -278,13 +286,17 @@ class Game:
             # Update game objects only if game is not over
             if not self.game_over:
                 self.character.update(keys_pressed)
-                self.asselya.update(self.character.world_x, self.character.world_y)
+                # self.asselya.update(self.character.world_x, self.character.world_y)  # DISABLED
                 self.npc.update()  # Stationary NPC only needs animation update
                 self.bakhredin.update()  # Stationary Bakhredin NPC only needs animation update
                 self.camera.update(self.character.world_x, self.character.world_y)
                 
                 # Check collision
                 self.check_collision()
+                
+                # Check door collision and teleport
+                if self.check_door_collision():
+                    self.teleport_to_lection()
             else:
                 # Increment game over timer for effects
                 self.game_over_timer += 1
@@ -300,8 +312,8 @@ class Game:
             # Draw character
             self.character.draw(self.screen, self.camera)
             
-            # Draw Asselya (following NPC)
-            self.asselya.draw(self.screen, self.camera)
+            # Draw Asselya (following NPC) - DISABLED
+            # self.asselya.draw(self.screen, self.camera)
             
             # Draw stationary NPC (Bernar)
             self.npc.draw(self.screen, self.camera)
@@ -319,17 +331,34 @@ class Game:
             # Draw UI info (only if game is not over)
             if not self.game_over:
                 font = pygame.font.Font(None, 36)
-                info_text = f"Pos: ({int(self.character.world_x)}, {int(self.character.world_y)}) | Camera: ({int(self.camera.x)}, {int(self.camera.y)})"
+                info_text = f"Pos: ({int(self.character.world_x)}, {int(self.character.world_y)}) | Main Map"
                 text_surface = font.render(info_text, True, WHITE)
                 self.screen.blit(text_surface, (10, 10))
                 
                 controls_text = "Controls: WASD/Arrows to move, Shift to run, ESC to quit"
                 controls_surface = font.render(controls_text, True, WHITE)
                 self.screen.blit(controls_surface, (10, 50))
+                
+                # Show door info
+                door_collision = self.check_door_collision()
+                door_text = f"Door: ({int(self.door_x1)}, {int(self.door_y)}) to ({int(self.door_x2)}, {int(self.door_y + self.door_height)}) | Collision: {door_collision}"
+                door_surface = font.render(door_text, True, (255, 255, 0) if door_collision else (200, 200, 200))
+                self.screen.blit(door_surface, (10, 90))
             
             # Draw game over screen if game is over
             if self.game_over:
                 self.draw_game_over_screen()
+            
+
+            
+            # Apply fade-in effect
+            if self.fade_alpha > 0:
+                self.fade_alpha -= self.fade_speed
+                if self.fade_alpha < 0:
+                    self.fade_alpha = 0
+                
+                self.fade_surface.set_alpha(self.fade_alpha)
+                self.screen.blit(self.fade_surface, (0, 0))
             
             # Update display
             pygame.display.flip()
