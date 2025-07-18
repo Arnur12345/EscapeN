@@ -56,6 +56,35 @@ class Game:
                 color_value = int(50 + (y / BG_HEIGHT) * 100)
                 pygame.draw.line(self.background, (color_value, color_value, color_value), (0, y), (BG_WIDTH, y))
         
+        # Load start project image and UI
+        try:
+            # Load and scale start project image
+            self.startproject_img = pygame.image.load("assets/startproject.png")
+            target_width = int((1994 - 1874) * 1.5)  # 180 pixels
+            target_height = int((908 - 833) * 1.5)   # 112.5 pixels
+            self.startproject_img = pygame.transform.scale(self.startproject_img, (target_width, target_height))
+            self.startproject_x = int(1874 * 1.5)  # 2811
+            self.startproject_y = int(833 * 1.5)   # 1249.5
+            print(f"Start project image loaded and positioned at ({self.startproject_x}, {self.startproject_y})")
+            
+            # Load start game window
+            self.startgame_window = pygame.image.load("assets/startthegame.png")
+            self.startgame_window = pygame.transform.scale(self.startgame_window, (WIDTH, HEIGHT))
+            
+            # Define clickable button area within the window
+            self.button_width = 400  # Adjust as needed
+            self.button_height = 100  # Adjust as needed
+            self.button_x = (WIDTH - self.button_width) // 2
+            self.button_y = (HEIGHT - self.button_height) // 2
+            
+            # Start game UI state
+            self.show_start_window = False
+            
+        except pygame.error as e:
+            print(f"Could not load start game assets: {e}")
+            self.startproject_img = None
+            self.startgame_window = None
+        
         # Initialize game objects
         self.camera = Camera()
         
@@ -143,6 +172,26 @@ class Game:
             self.door_y <= player_y <= self.door_y + self.door_height):
             return True
         return False
+    
+    def check_startproject_collision(self):
+        """Check if player is on the start project image"""
+        if not self.startproject_img:
+            return False
+            
+        player_x = self.character.world_x + self.character.width // 2
+        player_y = self.character.world_y + self.character.height // 2
+        
+        return (self.startproject_x <= player_x <= self.startproject_x + int((1994 - 1874) * 1.5) and
+                self.startproject_y <= player_y <= self.startproject_y + int((908 - 833) * 1.5))
+    
+    def check_button_click(self, mouse_pos):
+        """Check if the start game button was clicked"""
+        if not self.show_start_window or not self.startgame_window:
+            return False
+            
+        mouse_x, mouse_y = mouse_pos
+        return (self.button_x <= mouse_x <= self.button_x + self.button_width and
+                self.button_y <= mouse_y <= self.button_y + self.button_height)
         
     def teleport_to_lection(self):
         """Teleport player to lection hall (separate game environment)"""
@@ -366,12 +415,14 @@ class Game:
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        running = False
+                        if self.show_start_window:
+                            self.show_start_window = False
+                        else:
+                            running = False
                     elif event.key == pygame.K_r and self.game_over:
                         self.restart_game()
-                    
                     # Test keys for startup metrics (only during gameplay)
-                    elif not self.game_over:
+                    elif not self.game_over and not self.show_start_window:
                         # Users control (1-5 keys)
                         if event.key == pygame.K_1:
                             if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
@@ -417,19 +468,21 @@ class Game:
                             self.task_manager.activate_task("launch_product")
                         elif event.key == pygame.K_F5:
                             self.task_manager.activate_task("social_media")
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:  # Left click
+                        if self.check_button_click(event.pos):
+                            self.teleport_to_lection()
             
             # Get pressed keys for continuous input
             keys_pressed = pygame.key.get_pressed()
             
-            # Update game objects only if game is not over
-            if not self.game_over:
+            # Update game objects only if game is not over and start window is not shown
+            if not self.game_over and not self.show_start_window:
                 self.character.update(keys_pressed)
                 # self.asselya.update(self.character.world_x, self.character.world_y)  # DISABLED
                 self.npc.update()  # Stationary NPC only needs animation update
                 self.bakhredin.update()  # Stationary Bakhredin NPC only needs animation update
                 self.camera.update(self.character.world_x, self.character.world_y)
-                
-                # Startup metrics are now static - controlled manually via functions
                 
                 # Check collision
                 self.check_collision()
@@ -441,7 +494,6 @@ class Game:
                 )
                 
                 # Handle task completion (press E to complete)
-                keys_pressed = pygame.key.get_pressed()
                 if task_interaction and keys_pressed[pygame.K_e]:
                     rewards = self.task_manager.complete_task(task_interaction)
                     if rewards:
@@ -449,9 +501,9 @@ class Game:
                         self.add_users(rewards["users"])
                         self.add_money(rewards["money"])
                 
-                # Check door collision and teleport
-                if self.check_door_collision():
-                    self.teleport_to_lection()
+                # Check if player is on start project
+                if self.check_startproject_collision():
+                    self.show_start_window = True
             else:
                 # Increment game over timer for effects
                 self.game_over_timer += 1
@@ -460,6 +512,11 @@ class Game:
             # Draw background with camera offset
             bg_x, bg_y = self.camera.apply(0, 0)
             self.screen.blit(self.background, (bg_x, bg_y))
+            
+            # Draw start project image
+            if self.startproject_img:
+                start_x, start_y = self.camera.apply(self.startproject_x, self.startproject_y)
+                self.screen.blit(self.startproject_img, (start_x, start_y))
             
             # Draw polygon boundaries
             self.draw_polygon_boundaries(self.screen)
@@ -483,11 +540,15 @@ class Game:
             self.apply_horror_lighting()
             
             # Apply flicker effect based on NPC proximity (only if game is not over)
-            if not self.game_over:
+            if not self.game_over and not self.show_start_window:
                 self.apply_flicker_effect()
             
-            # Draw UI info (only if game is not over)
-            if not self.game_over:
+            # Draw start game window and button if active
+            if self.show_start_window and self.startgame_window:
+                self.screen.blit(self.startgame_window, (0, 0))
+            
+            # Draw UI info (only if game is not over and start window is not shown)
+            if not self.game_over and not self.show_start_window:
                 font = pygame.font.Font(None, 36)
                 info_text = f"Pos: ({int(self.character.world_x)}, {int(self.character.world_y)}) | Main Map"
                 text_surface = font.render(info_text, True, WHITE)
@@ -522,8 +583,6 @@ class Game:
             # Draw game over screen if game is over
             if self.game_over:
                 self.draw_game_over_screen()
-            
-
             
             # Apply fade-in effect
             if self.fade_alpha > 0:
