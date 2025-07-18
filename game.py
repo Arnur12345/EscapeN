@@ -154,15 +154,6 @@ class Game:
         self.task_manager = TaskManager()
         self.task_manager.set_asselya(self.asselya)  # Связываем TaskManager с Аселей
         print("Task system initialized")
-        
-        # Load and play background music
-        try:
-            pygame.mixer.music.load("song.mp3")
-            pygame.mixer.music.set_volume(0.5)  # Set volume to 50%
-            pygame.mixer.music.play(-1)  # Play indefinitely (-1 means loop forever)
-            print("Background music loaded and started")
-        except pygame.error as e:
-            print(f"Could not load background music: {e}")
     
     def check_collision(self):
         """Check if Asselya caught the player"""

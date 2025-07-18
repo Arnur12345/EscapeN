@@ -7,7 +7,6 @@ from starting_page import StartingPage
 def main():
     try:
         pygame.init()
-        pygame.mixer.init()  # Initialize the mixer for audio
         pygame.display.set_mode((800, 600))
         pygame.display.set_caption("Escapist Game")
 

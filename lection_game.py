@@ -357,15 +357,6 @@ class LectionGame:
         # Create NPCs for lection hall (optional - can be added later)
         # For now, no NPCs in lection hall
         
-        # Load and play background music (continue from main game)
-        try:
-            pygame.mixer.music.load("song.mp3")
-            pygame.mixer.music.set_volume(0.5)  # Set volume to 50%
-            pygame.mixer.music.play(-1)  # Play indefinitely (-1 means loop forever)
-            print("Background music loaded and started in lection hall")
-        except pygame.error as e:
-            print(f"Could not load background music in lection hall: {e}")
-        
     def restart_game(self):
         """Restart the lection game"""
         self.game_over = False
