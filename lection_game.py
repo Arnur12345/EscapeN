@@ -30,60 +30,9 @@ class LectionCharacter:
         self.load_standing_sprites()
         self.load_walking_sprites()
         self.load_running_sprites()
-        
-    def load_standing_sprites(self):
-        """Load standing animation sprites"""
-        sprites_path = "sprites/standing/"
-        for i in range(1, 7):  # stand1.png to stand6.png
-            sprite_file = f"stand{i}.png"
-            sprite_path = os.path.join(sprites_path, sprite_file)
-            try:
-                sprite = pygame.image.load(sprite_path)
-                # Scale sprite proportionally for 1920x1080
-                original_size = sprite.get_size()
-                scale_factor = 1.5 / 1.3  # 1.15x total scaling
-                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
-                sprite = pygame.transform.scale(sprite, new_size)
-                self.standing_sprites.append(sprite)
-            except pygame.error as e:
-                print(f"Could not load sprite {sprite_path}: {e}")
     
-    def load_walking_sprites(self):
-        """Load walking animation sprites"""
-        sprites_path = "sprites/walking/"
-        for i in range(1, 11):  # walk1.png to walk10.png
-            sprite_file = f"walk{i}.png"
-            sprite_path = os.path.join(sprites_path, sprite_file)
-            try:
-                sprite = pygame.image.load(sprite_path)
-                # Scale sprite proportionally for 1920x1080
-                original_size = sprite.get_size()
-                scale_factor = 1.5 / 1.3  # 1.15x total scaling
-                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
-                sprite = pygame.transform.scale(sprite, new_size)
-                self.walking_sprites.append(sprite)
-            except pygame.error as e:
-                print(f"Could not load sprite {sprite_path}: {e}")
-    
-    def load_running_sprites(self):
-        """Load running animation sprites"""
-        sprites_path = "sprites/running/"
-        for i in range(1, 11):  # run1.png to run10.png
-            sprite_file = f"run{i}.png"
-            sprite_path = os.path.join(sprites_path, sprite_file)
-            try:
-                sprite = pygame.image.load(sprite_path)
-                # Scale sprite proportionally for 1920x1080
-                original_size = sprite.get_size()
-                scale_factor = 1.5 / 1.3  # 1.15x total scaling
-                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
-                sprite = pygame.transform.scale(sprite, new_size)
-                self.running_sprites.append(sprite)
-            except pygame.error as e:
-                print(f"Could not load sprite {sprite_path}: {e}")
-    
-    def update(self, keys):
-        """Update character position and animation - NO BOUNDARY CHECKS"""
+    def update(self, keys, collision_mask, map_width, map_height):
+        """Update character position and animation with collision detection"""
         old_x, old_y = self.world_x, self.world_y
         
         # Handle movement
@@ -97,21 +46,42 @@ class LectionCharacter:
             self.speed = 5
             self.is_walking = True
         
-        # Free movement - no collision checks
+        # Calculate new position
+        new_x, new_y = self.world_x, self.world_y
+        
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            self.world_x -= self.speed
+            new_x -= self.speed
             self.facing_right = False
         elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            self.world_x += self.speed
+            new_x += self.speed
             self.facing_right = True
         else:
             self.is_walking = False
             self.is_running = False
         
         if keys[pygame.K_UP] or keys[pygame.K_w]:
-            self.world_y -= self.speed
+            new_y -= self.speed
         elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            self.world_y += self.speed
+            new_y += self.speed
+        
+        # Check boundaries
+        if new_x < 0:
+            new_x = 0
+        elif new_x + self.width > map_width:
+            new_x = map_width - self.width
+            
+        if new_y < 0:
+            new_y = 0
+        elif new_y + self.height > map_height:
+            new_y = map_height - self.height
+        
+        # Check collision with objects
+        if self.check_collision(new_x, new_y, collision_mask):
+            # If collision, don't move
+            new_x, new_y = self.world_x, self.world_y
+        
+        # Update position
+        self.world_x, self.world_y = new_x, new_y
         
         # Update animation
         if self.world_x != old_x or self.world_y != old_y:
@@ -129,6 +99,182 @@ class LectionCharacter:
                 self.animation_counter = 0
                 if self.standing_sprites:
                     self.current_frame = (self.current_frame + 1) % len(self.standing_sprites)
+    
+    def check_collision(self, x, y, collision_mask):
+        """Check if character collides with obstacles"""
+        if collision_mask is None:
+            return False
+            
+        # Check collision at character's corners and center
+        check_points = [
+            (int(x), int(y)),  # Top-left
+            (int(x + self.width), int(y)),  # Top-right
+            (int(x), int(y + self.height)),  # Bottom-left
+            (int(x + self.width), int(y + self.height)),  # Bottom-right
+            (int(x + self.width // 2), int(y + self.height // 2))  # Center
+        ]
+        
+        mask_width, mask_height = collision_mask.get_size()
+        
+        for px, py in check_points:
+            if 0 <= px < mask_width and 0 <= py < mask_height:
+                # Check if pixel is not transparent (obstacle)
+                try:
+                    pixel = collision_mask.get_at((px, py))
+                    if pixel[3] > 128:  # Alpha > 128 means solid obstacle
+                        return True
+                except IndexError:
+                    continue
+        
+        return False
+        
+    def load_standing_sprites(self):
+        """Load standing animation sprites"""
+        sprites_path = "sprites/standing/"
+        for i in range(1, 7):  # stand1.png to stand6.png
+            sprite_file = f"stand{i}.png"
+            sprite_path = os.path.join(sprites_path, sprite_file)
+            try:
+                sprite = pygame.image.load(sprite_path)
+                # Scale sprite proportionally for 1920x1080
+                original_size = sprite.get_size()
+                scale_factor = 2.0  # Increased scaling for better visibility
+                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+                sprite = pygame.transform.scale(sprite, new_size)
+                self.standing_sprites.append(sprite)
+            except pygame.error as e:
+                print(f"Could not load sprite {sprite_path}: {e}")
+    
+    def load_walking_sprites(self):
+        """Load walking animation sprites"""
+        sprites_path = "sprites/walking/"
+        for i in range(1, 11):  # walk1.png to walk10.png
+            sprite_file = f"walk{i}.png"
+            sprite_path = os.path.join(sprites_path, sprite_file)
+            try:
+                sprite = pygame.image.load(sprite_path)
+                # Scale sprite proportionally for 1920x1080
+                original_size = sprite.get_size()
+                scale_factor = 2.0  # Increased scaling for better visibility
+                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+                sprite = pygame.transform.scale(sprite, new_size)
+                self.walking_sprites.append(sprite)
+            except pygame.error as e:
+                print(f"Could not load sprite {sprite_path}: {e}")
+    
+    def load_running_sprites(self):
+        """Load running animation sprites"""
+        sprites_path = "sprites/running/"
+        for i in range(1, 11):  # run1.png to run10.png
+            sprite_file = f"run{i}.png"
+            sprite_path = os.path.join(sprites_path, sprite_file)
+            try:
+                sprite = pygame.image.load(sprite_path)
+                # Scale sprite proportionally for 1920x1080
+                original_size = sprite.get_size()
+                scale_factor = 2.0  # Increased scaling for better visibility
+                new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
+                sprite = pygame.transform.scale(sprite, new_size)
+                self.running_sprites.append(sprite)
+            except pygame.error as e:
+                print(f"Could not load sprite {sprite_path}: {e}")
+    
+    def update(self, keys, collision_mask, map_width, map_height):
+        """Update character position and animation with collision detection"""
+        old_x, old_y = self.world_x, self.world_y
+        
+        # Handle movement
+        self.is_walking = False
+        self.is_running = False
+        
+        if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+            self.speed = 8
+            self.is_running = True
+        else:
+            self.speed = 5
+            self.is_walking = True
+        
+        # Calculate new position
+        new_x, new_y = self.world_x, self.world_y
+        
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            new_x -= self.speed
+            self.facing_right = False
+        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            new_x += self.speed
+            self.facing_right = True
+        else:
+            self.is_walking = False
+            self.is_running = False
+        
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            new_y -= self.speed
+        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            new_y += self.speed
+        
+        # Check boundaries
+        if new_x < 0:
+            new_x = 0
+        elif new_x + self.width > map_width:
+            new_x = map_width - self.width
+            
+        if new_y < 0:
+            new_y = 0
+        elif new_y + self.height > map_height:
+            new_y = map_height - self.height
+        
+        # Check collision with objects
+        if self.check_collision(new_x, new_y, collision_mask):
+            # If collision, don't move
+            new_x, new_y = self.world_x, self.world_y
+        
+        # Update position
+        self.world_x, self.world_y = new_x, new_y
+        
+        # Update animation
+        if self.world_x != old_x or self.world_y != old_y:
+            self.animation_counter += 1
+            if self.animation_counter >= ANIMATION_SPEED:
+                self.animation_counter = 0
+                if self.is_running and self.running_sprites:
+                    self.current_frame = (self.current_frame + 1) % len(self.running_sprites)
+                elif self.is_walking and self.walking_sprites:
+                    self.current_frame = (self.current_frame + 1) % len(self.walking_sprites)
+        else:
+            # Standing animation
+            self.animation_counter += 1
+            if self.animation_counter >= ANIMATION_SPEED * 2:  # Slower standing animation
+                self.animation_counter = 0
+                if self.standing_sprites:
+                    self.current_frame = (self.current_frame + 1) % len(self.standing_sprites)
+    
+    def check_collision(self, x, y, collision_mask):
+        """Check if character collides with obstacles"""
+        if collision_mask is None:
+            return False
+            
+        # Check collision at character's corners and center
+        check_points = [
+            (int(x), int(y)),  # Top-left
+            (int(x + self.width), int(y)),  # Top-right
+            (int(x), int(y + self.height)),  # Bottom-left
+            (int(x + self.width), int(y + self.height)),  # Bottom-right
+            (int(x + self.width // 2), int(y + self.height // 2))  # Center
+        ]
+        
+        mask_width, mask_height = collision_mask.get_size()
+        
+        for px, py in check_points:
+            if 0 <= px < mask_width and 0 <= py < mask_height:
+                # Check if pixel is not transparent (obstacle)
+                try:
+                    pixel = collision_mask.get_at((px, py))
+                    if pixel[3] > 128:  # Alpha > 128 means solid obstacle
+                        return True
+                except IndexError:
+                    continue
+        
+        return False
     
     def draw(self, screen, camera):
         """Draw character on screen"""
@@ -187,13 +333,25 @@ class LectionGame:
             self.background = pygame.Surface((smaller_bg_width, smaller_bg_height))
             self.background.fill((20, 20, 30))  # Dark blue-gray
         
+        # Load collision objects layer
+        try:
+            self.objects_layer = pygame.image.load("lection_objects.png")
+            # Scale to match background
+            self.objects_layer = pygame.transform.scale(self.objects_layer, (smaller_bg_width, smaller_bg_height))
+        except pygame.error as e:
+            print(f"Could not load lection_objects.png: {e}")
+            self.objects_layer = None
+        
+        # Get map dimensions
+        self.map_width, self.map_height = smaller_bg_width, smaller_bg_height
+        
         # Initialize game objects
         self.camera = Camera()
         
-        # No polygon boundaries for lection hall - free movement
-        # Start character at spawn position (adjusted for smaller background)
-        spawn_x = 260 * 1.2  # 312 (adjusted for smaller background)
-        spawn_y = 1400 * 1.2  # 1680 (adjusted for smaller background)
+        # No polygon boundaries for lection hall - using pixel-based collision
+        # Start character at bottom-left corner
+        spawn_x = 50
+        spawn_y = self.map_height - 150
         self.character = LectionCharacter(spawn_x, spawn_y)
         
         # Create NPCs for lection hall (optional - can be added later)
@@ -207,9 +365,9 @@ class LectionGame:
         # Reset fade-in effect
         self.fade_alpha = 255
         
-        # Reset character position to spawn (adjusted for smaller background)
-        spawn_x = 260 * 1.2  # 312
-        spawn_y = 1400 * 1.2  # 1680
+        # Reset character position to spawn at bottom-left corner
+        spawn_x = 50
+        spawn_y = self.map_height - 150
         self.character.world_x = spawn_x
         self.character.world_y = spawn_y
         self.character.is_running = False
@@ -295,7 +453,7 @@ class LectionGame:
             
             # Update game objects only if game is not over
             if not self.game_over:
-                self.character.update(keys_pressed)
+                self.character.update(keys_pressed, self.objects_layer, self.map_width, self.map_height)
                 self.camera.update(self.character.world_x, self.character.world_y)
             else:
                 # Increment game over timer for effects
@@ -305,6 +463,10 @@ class LectionGame:
             # Draw background with camera offset
             bg_x, bg_y = self.camera.apply(0, 0)
             self.screen.blit(self.background, (bg_x, bg_y))
+            
+            # Draw objects layer on top of background
+            if self.objects_layer:
+                self.screen.blit(self.objects_layer, (bg_x, bg_y))
             
             # Draw character
             self.character.draw(self.screen, self.camera)
