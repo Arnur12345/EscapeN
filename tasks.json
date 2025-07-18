@@ -1,0 +1,74 @@
+{
+  "tasks": [
+    {
+      "id": "first_users",
+      "title": "Привлечь первых пользователей",
+      "description": "Найди и активируй компьютер для запуска рекламной кампании",
+      "sprite_before": "sprites/tasks/computer_off.png",
+      "sprite_after": "sprites/tasks/computer_on.png",
+      "world_x": 1500,
+      "world_y": 1200,
+      "width": 80,
+      "height": 60,
+      "reward_users": 50,
+      "reward_money": 500,
+      "status": "inactive"
+    },
+    {
+      "id": "find_investor",
+      "title": "Найти инвестора",
+      "description": "Поговори с потенциальным инвестором в офисе",
+      "sprite_before": "sprites/tasks/investor_waiting.png",
+      "sprite_after": "sprites/tasks/investor_happy.png",
+      "world_x": 2200,
+      "world_y": 1000,
+      "width": 70,
+      "height": 100,
+      "reward_users": 0,
+      "reward_money": 5000,
+      "status": "inactive"
+    },
+    {
+      "id": "hire_developer",
+      "title": "Нанять разработчика",
+      "description": "Найди талантливого программиста для команды",
+      "sprite_before": "sprites/tasks/desk_empty.png",
+      "sprite_after": "sprites/tasks/desk_occupied.png",
+      "world_x": 1800,
+      "world_y": 1400,
+      "width": 90,
+      "height": 70,
+      "reward_users": 100,
+      "reward_money": -2000,
+      "status": "inactive"
+    },
+    {
+      "id": "launch_product",
+      "title": "Запустить MVP",
+      "description": "Активируй сервер для запуска минимального продукта",
+      "sprite_before": "sprites/tasks/server_off.png",
+      "sprite_after": "sprites/tasks/server_on.png",
+      "world_x": 2500,
+      "world_y": 1300,
+      "width": 100,
+      "height": 80,
+      "reward_users": 500,
+      "reward_money": 1000,
+      "status": "inactive"
+    },
+    {
+      "id": "social_media",
+      "title": "Запустить соцсети",
+      "description": "Настрой профили в социальных сетях",
+      "sprite_before": "sprites/tasks/phone_off.png",
+      "sprite_after": "sprites/tasks/phone_active.png",
+      "world_x": 1200,
+      "world_y": 1500,
+      "width": 50,
+      "height": 80,
+      "reward_users": 200,
+      "reward_money": 300,
+      "status": "inactive"
+    }
+  ]
+} 

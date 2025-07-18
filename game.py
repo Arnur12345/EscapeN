@@ -1,11 +1,13 @@
 import pygame
 import sys
-from constants import WIDTH, HEIGHT, BG_WIDTH, BG_HEIGHT, FPS, WHITE, LIGHT_RADIUS, DARKNESS_ALPHA
+from constants import (WIDTH, HEIGHT, BG_WIDTH, BG_HEIGHT, FPS, WHITE, LIGHT_RADIUS, DARKNESS_ALPHA,
+                      USERS_COLOR, MONEY_COLOR, BAR_BG_COLOR, BAR_BORDER_COLOR, BLACK, GREEN)
 from utils import set_polygon_boundaries
 from camera import Camera
 from character import Character
 # from asselya import Asselya  # Temporarily disabled for safe environment
 from npc import NPC
+from task_manager import TaskManager
 
 class Game:
     def __init__(self):
@@ -17,6 +19,12 @@ class Game:
         self.game_over = False
         self.game_over_timer = 0
         self.flicker_timer = 0
+        
+        # Startup metrics
+        self.users = 10  # Starting with 10 users
+        self.money = 1000  # Starting with $1000
+        self.max_users = 1000000  # 1M users max
+        self.max_money = 10000000  # $10M max
         
         # Fade-in effect
         self.fade_alpha = 255  # Start with black screen
@@ -115,6 +123,10 @@ class Game:
         
         # Create stationary NPC (Bakhredin) to the right of spawn point
         self.bakhredin = NPC(start_x + 150, start_y, "npc/bakhredin/bahr", 90, 7)
+        
+        # Initialize task system
+        self.task_manager = TaskManager()
+        print("Task system initialized")
     
     def check_collision(self):
         """Check if Asselya caught the player - DISABLED"""
@@ -181,6 +193,10 @@ class Game:
         self.game_over_timer = 0
         self.flicker_timer = 0
         
+        # Reset startup metrics
+        self.users = 10
+        self.money = 1000
+        
         # Reset fade-in effect
         self.fade_alpha = 255
         
@@ -204,6 +220,9 @@ class Game:
         self.npc.world_y = start_y
         self.bakhredin.world_x = start_x + 150
         self.bakhredin.world_y = start_y
+        
+        # Reset tasks
+        self.task_manager.reset_all_tasks()
         
         # Reset camera
         self.camera.update(self.character.world_x, self.character.world_y)
@@ -266,6 +285,77 @@ class Game:
         # Apply the darkness overlay to the screen
         self.screen.blit(self.darkness_surface, (0, 0))
     
+    def draw_startup_metrics(self):
+        """Draw startup metrics bars (users and money)"""
+        bar_width = 300
+        bar_height = 25
+        bar_x = WIDTH - bar_width - 20  # Right side of screen
+        users_bar_y = 20
+        money_bar_y = users_bar_y + bar_height + 15
+        
+        # Draw Users bar
+        users_percentage = min(self.users / self.max_users, 1.0)
+        users_fill_width = int(bar_width * users_percentage)
+        
+        # Background
+        pygame.draw.rect(self.screen, BAR_BG_COLOR, (bar_x, users_bar_y, bar_width, bar_height))
+        # Fill
+        pygame.draw.rect(self.screen, USERS_COLOR, (bar_x, users_bar_y, users_fill_width, bar_height))
+        # Border
+        pygame.draw.rect(self.screen, BAR_BORDER_COLOR, (bar_x, users_bar_y, bar_width, bar_height), 2)
+        
+        # Users text
+        font = pygame.font.Font(None, 28)
+        users_text = f"Users: {self.users:,}"
+        users_surface = font.render(users_text, True, WHITE)
+        self.screen.blit(users_surface, (bar_x, users_bar_y - 25))
+        
+        # Draw Money bar
+        money_percentage = min(self.money / self.max_money, 1.0)
+        money_fill_width = int(bar_width * money_percentage)
+        
+        # Background
+        pygame.draw.rect(self.screen, BAR_BG_COLOR, (bar_x, money_bar_y, bar_width, bar_height))
+        # Fill
+        pygame.draw.rect(self.screen, MONEY_COLOR, (bar_x, money_bar_y, money_fill_width, bar_height))
+        # Border
+        pygame.draw.rect(self.screen, BAR_BORDER_COLOR, (bar_x, money_bar_y, bar_width, bar_height), 2)
+        
+        # Money text
+        money_text = f"Money: ${self.money:,}"
+        money_surface = font.render(money_text, True, WHITE)
+        self.screen.blit(money_surface, (bar_x, money_bar_y - 25))
+    
+    def add_users(self, amount):
+        """Add users to the startup"""
+        self.users = min(self.users + amount, self.max_users)
+        print(f"Added {amount} users. Total: {self.users:,}")
+    
+    def remove_users(self, amount):
+        """Remove users from the startup"""
+        self.users = max(self.users - amount, 0)
+        print(f"Removed {amount} users. Total: {self.users:,}")
+    
+    def add_money(self, amount):
+        """Add money to the startup"""
+        self.money = min(self.money + amount, self.max_money)
+        print(f"Added ${amount:,}. Total: ${self.money:,}")
+    
+    def remove_money(self, amount):
+        """Remove money from the startup"""
+        self.money = max(self.money - amount, 0)
+        print(f"Removed ${amount:,}. Total: ${self.money:,}")
+    
+    def set_users(self, amount):
+        """Set exact number of users"""
+        self.users = min(max(amount, 0), self.max_users)
+        print(f"Set users to: {self.users:,}")
+    
+    def set_money(self, amount):
+        """Set exact amount of money"""
+        self.money = min(max(amount, 0), self.max_money)
+        print(f"Set money to: ${self.money:,}")
+    
     def run(self):
         """Main game loop"""
         running = True
@@ -279,6 +369,54 @@ class Game:
                         running = False
                     elif event.key == pygame.K_r and self.game_over:
                         self.restart_game()
+                    
+                    # Test keys for startup metrics (only during gameplay)
+                    elif not self.game_over:
+                        # Users control (1-5 keys)
+                        if event.key == pygame.K_1:
+                            if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
+                                self.remove_users(10)
+                            else:
+                                self.add_users(10)
+                        elif event.key == pygame.K_2:
+                            if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
+                                self.remove_users(100)
+                            else:
+                                self.add_users(100)
+                        elif event.key == pygame.K_3:
+                            if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
+                                self.remove_users(1000)
+                            else:
+                                self.add_users(1000)
+                        
+                        # Money control (6-9 keys)
+                        elif event.key == pygame.K_6:
+                            if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
+                                self.remove_money(100)
+                            else:
+                                self.add_money(100)
+                        elif event.key == pygame.K_7:
+                            if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
+                                self.remove_money(1000)
+                            else:
+                                self.add_money(1000)
+                        elif event.key == pygame.K_8:
+                            if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
+                                self.remove_money(10000)
+                            else:
+                                self.add_money(10000)
+                        
+                        # Task management keys (F1-F5)
+                        elif event.key == pygame.K_F1:
+                            self.task_manager.activate_task("first_users")
+                        elif event.key == pygame.K_F2:
+                            self.task_manager.activate_task("find_investor")
+                        elif event.key == pygame.K_F3:
+                            self.task_manager.activate_task("hire_developer")
+                        elif event.key == pygame.K_F4:
+                            self.task_manager.activate_task("launch_product")
+                        elif event.key == pygame.K_F5:
+                            self.task_manager.activate_task("social_media")
             
             # Get pressed keys for continuous input
             keys_pressed = pygame.key.get_pressed()
@@ -291,8 +429,25 @@ class Game:
                 self.bakhredin.update()  # Stationary Bakhredin NPC only needs animation update
                 self.camera.update(self.character.world_x, self.character.world_y)
                 
+                # Startup metrics are now static - controlled manually via functions
+                
                 # Check collision
                 self.check_collision()
+                
+                # Check task interactions
+                task_interaction = self.task_manager.check_task_interactions(
+                    self.character.world_x, self.character.world_y,
+                    self.character.width, self.character.height
+                )
+                
+                # Handle task completion (press E to complete)
+                keys_pressed = pygame.key.get_pressed()
+                if task_interaction and keys_pressed[pygame.K_e]:
+                    rewards = self.task_manager.complete_task(task_interaction)
+                    if rewards:
+                        # Apply rewards to player
+                        self.add_users(rewards["users"])
+                        self.add_money(rewards["money"])
                 
                 # Check door collision and teleport
                 if self.check_door_collision():
@@ -321,6 +476,9 @@ class Game:
             # Draw stationary NPC (Bakhredin)
             self.bakhredin.draw(self.screen, self.camera)
             
+            # Draw tasks on map
+            self.task_manager.draw_tasks(self.screen, self.camera)
+            
             # Apply horror lighting effect
             self.apply_horror_lighting()
             
@@ -335,15 +493,31 @@ class Game:
                 text_surface = font.render(info_text, True, WHITE)
                 self.screen.blit(text_surface, (10, 10))
                 
-                controls_text = "Controls: WASD/Arrows to move, Shift to run, ESC to quit"
+                controls_text = "Controls: WASD/Arrows to move, Shift to run, E to complete task, ESC to quit"
                 controls_surface = font.render(controls_text, True, WHITE)
                 self.screen.blit(controls_surface, (10, 50))
+                
+                # Startup metrics controls
+                metrics_text = "Startup: 1-3 Users (Shift to remove), 6-8 Money (Shift to remove)"
+                metrics_surface = font.render(metrics_text, True, (200, 255, 200))
+                self.screen.blit(metrics_surface, (10, 90))
+                
+                # Task controls
+                task_text = "Tasks: F1-F5 to activate tasks"
+                task_surface = font.render(task_text, True, (255, 215, 0))
+                self.screen.blit(task_surface, (10, 130))
                 
                 # Show door info
                 door_collision = self.check_door_collision()
                 door_text = f"Door: ({int(self.door_x1)}, {int(self.door_y)}) to ({int(self.door_x2)}, {int(self.door_y + self.door_height)}) | Collision: {door_collision}"
                 door_surface = font.render(door_text, True, (255, 255, 0) if door_collision else (200, 200, 200))
-                self.screen.blit(door_surface, (10, 90))
+                self.screen.blit(door_surface, (10, 170))
+                
+                # Draw startup metrics bars
+                self.draw_startup_metrics()
+                
+                # Draw tasks UI panel
+                self.task_manager.draw_tasks_ui(self.screen)
             
             # Draw game over screen if game is over
             if self.game_over:
