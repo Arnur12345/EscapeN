@@ -26,7 +26,7 @@ LIGHT_GRAY = (192, 192, 192)
 
 # Horror lighting constants
 LIGHT_RADIUS = 150  # Radius of light around character
-DARKNESS_ALPHA = 100  # Transparency of darkness (0-255, higher = darker)
+DARKNESS_ALPHA = 240  # Transparency of darkness (0-255, higher = darker)
 
 # Startup metrics constants
 USERS_COLOR = LIGHT_BLUE

@@ -1,181 +1,147 @@
 import pygame
 import os
-import math
-from constants import ANIMATION_SPEED
+from constants import BLACK
 
 class Asselya:
-    def __init__(self, x, y, sprite_folder):
+    """Класс для NPC Асели, которая проверяет социальные сети"""
+    
+    def __init__(self, x, y, sprite_path):
+        """
+        Инициализация Асели
+        
+        Args:
+            x, y: Начальная позиция
+            sprite_path: Путь к папке со спрайтами
+        """
         self.world_x = x
         self.world_y = y
-        self.base_x = x  # Store initial position
+        self.base_x = x  # Базовая позиция для возврата
         self.base_y = y
-        self.sprite_folder = sprite_folder
-        self.speed = 7  # One unit slower than player's max speed (8)
-        self.width = 50
+        self.width = 70
         self.height = 100
-        self.vision_radius = 1000  # 1000-pixel vision radius (doubled)
-        self.returning_to_base = False
         
-        # Animation
-        self.current_frame = 0
-        self.animation_counter = 0
-        self.facing_right = True
+        # Состояния
+        self.is_active = False  # Активна ли Аселя
+        self.is_chasing = False  # Преследует ли игрока
+        self.speed = 5  # Базовая скорость движения
+        self.facing_left = False  # Направление спрайта
         
-        # Following behavior
-        self.is_following = False
-        self.is_running = False
-        self.wait_timer = 0
-        self.wait_duration = 60  # frames to wait before following
+        # Загрузка спрайтов
+        self.sprites = {
+            "standing": [],
+            "running": []
+        }
         
-        # Load sprites
-        self.standing_sprites = []
-        self.running_sprites = []
-        
-        self.load_standing_sprites()
-        self.load_running_sprites()
-        
-    def load_standing_sprites(self):
-        """Load standing animation sprites"""
-        standing_folder = "asselya/standing"
-        if os.path.exists(standing_folder):
-            for i in range(1, 5):  # stand1.png to stand4.png
-                sprite_path = os.path.join(standing_folder, f"stand{i}.png")
-                if os.path.exists(sprite_path):
-                    sprite = pygame.image.load(sprite_path).convert_alpha()
-                    # Scale sprite proportionally
-                    original_size = sprite.get_size()
-                    scale_factor = 1.5 / 1.3  # Same scaling as character
-                    new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
-                    sprite = pygame.transform.scale(sprite, new_size)
-                    self.standing_sprites.append(sprite)
-    
-    def load_running_sprites(self):
-        """Load running animation sprites"""
-        running_folder = "asselya/running"
-        if os.path.exists(running_folder):
-            # Get target size from standing sprites
-            target_size = None
-            if self.standing_sprites:
-                target_size = self.standing_sprites[0].get_size()
+        try:
+            # Получаем абсолютный путь к текущей директории
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            print(f"Current directory: {current_dir}")
             
-            for i in range(1, 10):  # run1.png to run9.png
-                sprite_path = os.path.join(running_folder, f"run{i}.png")
-                if os.path.exists(sprite_path):
-                    sprite = pygame.image.load(sprite_path).convert_alpha()
-                    
-                    if target_size:
-                        # Scale to match standing sprite size
-                        sprite = pygame.transform.scale(sprite, target_size)
-                    else:
-                        # Fallback: scale running sprites to approximate standing size
-                        # Running: 270*360, Standing: 56*74 (after scaling)
-                        # Calculate scale factor to match standing sprite proportions
-                        original_size = sprite.get_size()
-                        scale_factor_x = 56 * (1.5 / 1.3) / 270  # Target standing width / running width
-                        scale_factor_y = 74 * (1.5 / 1.3) / 360  # Target standing height / running height
-                        scale_factor = min(scale_factor_x, scale_factor_y)  # Use smaller to maintain proportions
-                        new_size = (int(original_size[0] * scale_factor), int(original_size[1] * scale_factor))
-                        sprite = pygame.transform.scale(sprite, new_size)
-                    
-                    self.running_sprites.append(sprite)
-    
-    def update(self, player_x, player_y):
-        """Update Asselya's position and behavior with vision system"""
-        # Calculate distance to player
-        distance_to_player = math.sqrt((player_x - self.world_x) ** 2 + (player_y - self.world_y) ** 2)
-        
-        # Calculate distance to base
-        distance_to_base = math.sqrt((self.base_x - self.world_x) ** 2 + (self.base_y - self.world_y) ** 2)
-        
-        # Check if player is within vision radius
-        player_in_vision = distance_to_player <= self.vision_radius
-        
-        if player_in_vision and not self.returning_to_base:
-            # Player is within vision, pursue them without stopping
-            self.wait_timer += 1
-            if self.wait_timer >= self.wait_duration:
-                self.is_following = True
-                self.is_running = True
-                
-                # Move towards player
-                dx = player_x - self.world_x
-                dy = player_y - self.world_y
-                
-                # Normalize and apply speed
-                if distance_to_player > 0:
-                    self.world_x += (dx / distance_to_player) * self.speed
-                    self.world_y += (dy / distance_to_player) * self.speed
-                
-                # Update facing direction
-                if dx > 0:
-                    self.facing_right = True
-                elif dx < 0:
-                    self.facing_right = False
-        else:
-            # Player is out of vision or we're returning to base
-            if not player_in_vision:
-                self.returning_to_base = True
-            
-            if self.returning_to_base:
-                if distance_to_base > 10:  # Return to base
-                    self.is_following = True
-                    self.is_running = True
-                    
-                    # Move towards base
-                    dx = self.base_x - self.world_x
-                    dy = self.base_y - self.world_y
-                    
-                    # Normalize and apply speed
-                    if distance_to_base > 0:
-                        self.world_x += (dx / distance_to_base) * self.speed
-                        self.world_y += (dy / distance_to_base) * self.speed
-                    
-                    # Update facing direction
-                    if dx > 0:
-                        self.facing_right = True
-                    elif dx < 0:
-                        self.facing_right = False
-                else:
-                    # Reached base, stop returning
-                    self.returning_to_base = False
-                    self.is_following = False
-                    self.is_running = False
-                    self.wait_timer = 0
+            # Загрузка спрайтов стояния
+            standing_path = os.path.join(current_dir, sprite_path, "standing")
+            print(f"Standing path: {standing_path}")
+            if os.path.exists(standing_path):
+                files = sorted(os.listdir(standing_path))
+                print(f"Found standing files: {files}")
+                for file in files:
+                    if file.endswith(".png"):
+                        full_path = os.path.join(standing_path, file)
+                        print(f"Loading standing sprite: {full_path}")
+                        sprite = pygame.image.load(full_path).convert_alpha()
+                        sprite = pygame.transform.scale(sprite, (self.width, self.height))
+                        self.sprites["standing"].append(sprite)
             else:
-                # Wait at current position
-                self.is_following = False
-                self.is_running = False
-                self.wait_timer = 0
+                print(f"Standing path does not exist: {standing_path}")
+            
+            # Загрузка спрайтов бега
+            running_path = os.path.join(current_dir, sprite_path, "running")
+            print(f"Running path: {running_path}")
+            if os.path.exists(running_path):
+                files = sorted(os.listdir(running_path))
+                print(f"Found running files: {files}")
+                for file in files:
+                    if file.endswith(".png"):
+                        full_path = os.path.join(running_path, file)
+                        print(f"Loading running sprite: {full_path}")
+                        sprite = pygame.image.load(full_path).convert_alpha()
+                        sprite = pygame.transform.scale(sprite, (self.width, self.height))
+                        self.sprites["running"].append(sprite)
+            else:
+                print(f"Running path does not exist: {running_path}")
+            
+            print(f"Loaded {len(self.sprites['standing'])} standing sprites and {len(self.sprites['running'])} running sprites")
+            
+            if not self.sprites["standing"] or not self.sprites["running"]:
+                raise Exception("No sprites loaded!")
+            
+        except Exception as e:
+            print(f"Ошибка загрузки спрайтов Асели: {e}")
+            # Создаем заглушку если спрайты не загрузились
+            surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            pygame.draw.rect(surface, (150, 0, 150), (0, 0, self.width, self.height))
+            self.sprites["standing"] = [surface]
+            self.sprites["running"] = [surface]
         
-        # Update animation
-        self.animation_counter += 1
-        if self.is_running and self.running_sprites:
-            if self.animation_counter >= ANIMATION_SPEED:
-                self.animation_counter = 0
-                self.current_frame = (self.current_frame + 1) % len(self.running_sprites)
-        else:
-            # Standing animation
-            if self.animation_counter >= ANIMATION_SPEED * 2:  # Slower standing animation
-                self.animation_counter = 0
-                if self.standing_sprites:
-                    self.current_frame = (self.current_frame + 1) % len(self.standing_sprites)
+        # Анимация
+        self.current_frame = 0
+        self.animation_timer = 0
+        self.ANIMATION_DELAY = 100  # Миллисекунды между кадрами
+        self.STANDING_DELAY = 150   # Более медленная анимация для стояния
+        
+        # Прямоугольник для коллизий
+        self.rect = pygame.Rect(self.world_x, self.world_y, self.width, self.height)
+    
+    def start_chase(self):
+        """Начать преследование игрока"""
+        print("Аселя начала преследование!")
+        self.is_chasing = True
+        self.current_frame = 0  # Сбрасываем анимацию
+    
+    def stop_chase(self):
+        """Остановить преследование игрока"""
+        print("Аселя вернулась на базу")
+        self.is_chasing = False
+        self.world_x = self.base_x
+        self.world_y = self.base_y
+        self.current_frame = 0  # Сбрасываем анимацию
+    
+    def update_animation(self, delta_time):
+        """Обновление анимации"""
+        self.animation_timer += delta_time
+        
+        # Выбираем задержку в зависимости от состояния
+        delay = self.ANIMATION_DELAY if self.is_chasing else self.STANDING_DELAY
+        
+        if self.animation_timer >= delay:
+            self.animation_timer = 0
+            sprites = self.sprites["running" if self.is_chasing else "standing"]
+            if sprites:  # Проверяем, что есть спрайты
+                self.current_frame = (self.current_frame + 1) % len(sprites)
     
     def draw(self, screen, camera):
-        """Draw Asselya on screen"""
+        """
+        Отрисовка Асели
+        
+        Args:
+            screen: Поверхность для отрисовки
+            camera: Объект камеры
+        """
+        if not self.is_active:
+            return
+            
+        # Получаем текущий спрайт
+        sprites = self.sprites["running" if self.is_chasing else "standing"]
+        if not sprites:
+            return
+            
+        current_sprite = sprites[self.current_frame]
+        
+        # Получаем экранные координаты
         screen_x, screen_y = camera.apply(self.world_x, self.world_y)
         
-        # Choose sprite based on state
-        if self.is_running and self.running_sprites:
-            sprite = self.running_sprites[self.current_frame % len(self.running_sprites)]
-        elif self.standing_sprites:
-            sprite = self.standing_sprites[self.current_frame % len(self.standing_sprites)]
-        else:
-            # Fallback rectangle if no sprites
-            pygame.draw.rect(screen, (255, 0, 255), (screen_x, screen_y, self.width, self.height))
-            return
+        # Отражаем спрайт по горизонтали если нужно
+        if self.facing_left:
+            current_sprite = pygame.transform.flip(current_sprite, True, False)
         
-        # Flip sprite if facing left
-        if not self.facing_right:
-            sprite = pygame.transform.flip(sprite, True, False)
-        
-        screen.blit(sprite, (screen_x, screen_y))
+        # Отрисовываем спрайт
+        screen.blit(current_sprite, (screen_x, screen_y))

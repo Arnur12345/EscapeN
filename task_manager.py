@@ -44,6 +44,7 @@ class Task:
         self.reward_users = task_data["reward_users"]
         self.reward_money = task_data["reward_money"]
         self.status = task_data["status"]
+        self.is_social = task_data.get("is_social", False)
         
         # Загрузка спрайтов
         self.sprite_before = None
@@ -51,8 +52,14 @@ class Task:
         self.current_sprite = None
         self.load_sprites()
         
-        # Прямоугольник для коллизий
-        self.rect = pygame.Rect(self.world_x, self.world_y, self.width, self.height)
+        # Увеличиваем область взаимодействия для удобства
+        self.interaction_radius = 100  # Увеличиваем радиус взаимодействия
+        self.rect = pygame.Rect(
+            self.world_x - self.interaction_radius,
+            self.world_y - self.interaction_radius,
+            self.width + self.interaction_radius * 2,
+            self.height + self.interaction_radius * 2
+        )
     
     def load_sprites(self):
         """Загрузка спрайтов для задания"""
@@ -102,52 +109,72 @@ class Task:
             new_status (str): Новый статус (из TaskStatus)
         """
         if new_status in [TaskStatus.INACTIVE, TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
+            old_status = self.status
             self.status = new_status
             self.update_current_sprite()
-            print(f"Задание '{self.title}' изменило статус на: {new_status}")
+            print(f"Задание '{self.title}' изменило статус: {old_status} -> {new_status}")
         else:
             print(f"Неизвестный статус: {new_status}")
     
     def draw(self, screen, camera):
         """
-        Отрисовка задания на карте (только если активно или завершено)
+        Отрисовка задания на карте
         
         Args:
             screen: Поверхность pygame для отрисовки
             camera: Объект камеры для расчета позиций
         """
-        if self.status in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
-            # Получаем экранные координаты через камеру
-            screen_x, screen_y = camera.apply(self.world_x, self.world_y)
+        if self.status not in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
+            return
             
-            # Отрисовываем спрайт
-            if self.current_sprite:
-                screen.blit(self.current_sprite, (screen_x, screen_y))
+        # Получаем экранные координаты
+        screen_x, screen_y = camera.apply(self.world_x, self.world_y)
+        
+        # Отрисовываем спрайт
+        if self.current_sprite:
+            screen.blit(self.current_sprite, (screen_x, screen_y))
+        
+        # Если задание активно, показываем область взаимодействия
+        if self.status == TaskStatus.ACTIVE:
+            # Рисуем круг взаимодействия
+            center_x = screen_x + self.width / 2
+            center_y = screen_y + self.height / 2
+            pygame.draw.circle(screen, (255, 255, 0, 128),
+                             (int(center_x), int(center_y)),
+                             self.interaction_radius, 2)
             
-            # Добавляем рамку для активных заданий
-            if self.status == TaskStatus.ACTIVE:
-                pygame.draw.rect(screen, GOLD, (screen_x - 2, screen_y - 2, 
-                               self.width + 4, self.height + 4), 2)
-            elif self.status == TaskStatus.COMPLETED:
-                pygame.draw.rect(screen, GREEN, (screen_x - 2, screen_y - 2, 
-                               self.width + 4, self.height + 4), 2)
+            # Рисуем рамку вокруг задания
+            pygame.draw.rect(screen, (0, 255, 0),
+                           (screen_x, screen_y, self.width, self.height), 2)
     
-    def check_collision(self, player_x, player_y, player_width, player_height):
+    def check_interaction(self, player_x, player_y):
         """
-        Проверка коллизии с игроком
+        Проверка возможности взаимодействия с заданием
         
         Args:
-            player_x, player_y: Позиция игрока в мире
-            player_width, player_height: Размеры игрока
+            player_x, player_y: Позиция игрока
             
         Returns:
-            bool: True если есть коллизия
+            bool: True если игрок достаточно близко для взаимодействия
         """
+        # Проверяем только активные задания
         if self.status != TaskStatus.ACTIVE:
             return False
             
-        player_rect = pygame.Rect(player_x, player_y, player_width, player_height)
-        return self.rect.colliderect(player_rect)
+        # Вычисляем центр задания
+        task_center_x = self.world_x + self.width / 2
+        task_center_y = self.world_y + self.height / 2
+        
+        # Вычисляем расстояние до игрока
+        dx = player_x - task_center_x
+        dy = player_y - task_center_y
+        distance = (dx * dx + dy * dy) ** 0.5
+        
+        # Проверяем, находится ли игрок в радиусе взаимодействия
+        can_interact = distance <= self.interaction_radius
+        if can_interact:
+            print(f"Можно взаимодействовать с заданием '{self.title}' (дистанция: {int(distance)})")
+        return can_interact
 
 class TaskManager:
     """Менеджер системы заданий"""
@@ -164,7 +191,22 @@ class TaskManager:
         self.active_tasks = []  # Список ID активных заданий
         self.completed_tasks = []  # Список ID завершенных заданий
         
+        # Таймеры для социальных заданий
+        self.social_timer = 0  # Таймер до следующей активации соц. заданий
+        self.social_warning_timer = 0  # Таймер для предупреждения (30 секунд)
+        self.social_tasks_active = False  # Флаг активности соц. заданий
+        self.social_warning_active = False  # Флаг активности предупреждения
+        self.SOCIAL_TIMER_MAX = 5 * 1000  # 5 секунд (в миллисекундах)
+        self.SOCIAL_WARNING_MAX = 30 * 1000  # 30 секунд на выполнение
+        
+        # Ссылка на Аселю (будет установлена из Game)
+        self.asselya = None
+        
         self.load_tasks()
+    
+    def set_asselya(self, asselya):
+        """Установка ссылки на объект Асели"""
+        self.asselya = asselya
     
     def load_tasks(self):
         """Загрузка заданий из JSON файла"""
@@ -266,6 +308,7 @@ class TaskManager:
             return None
         
         task = self.tasks[task_id]
+        print(f"Попытка выполнить задание: {task.title} (статус: {task.status})")
         
         if task.status == TaskStatus.ACTIVE:
             task.set_status(TaskStatus.COMPLETED)
@@ -273,17 +316,25 @@ class TaskManager:
             # Убираем из активных, добавляем в завершенные
             if task_id in self.active_tasks:
                 self.active_tasks.remove(task_id)
-            self.completed_tasks.append(task_id)
+            if task_id not in self.completed_tasks:
+                self.completed_tasks.append(task_id)
             
-            print(f"Задание '{task.title}' завершено!")
+            print(f"Задание '{task.title}' выполнено!")
             print(f"Награды: Пользователи: {task.reward_users}, Деньги: {task.reward_money}")
+            
+            # Если это социальное задание, проверяем все ли выполнены
+            if task.is_social and self.check_all_social_completed():
+                print("Все социальные задания выполнены!")
+                self.social_warning_active = False
+                self.social_tasks_active = False
+                self.social_timer = 0
             
             return {
                 "users": task.reward_users,
                 "money": task.reward_money
             }
         else:
-            print(f"Нельзя завершить задание '{task.title}' - оно не активно!")
+            print(f"Нельзя выполнить задание '{task.title}' - оно не активно!")
             return None
     
     def get_task_status(self, task_id):
@@ -327,7 +378,20 @@ class TaskManager:
             camera: Объект камеры для расчета позиций
         """
         for task in self.tasks.values():
-            task.draw(screen, camera)
+            if task.status in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
+                # Получаем экранные координаты
+                screen_x, screen_y = camera.apply(task.world_x, task.world_y)
+                
+                # Отрисовываем спрайт
+                if task.current_sprite:
+                    screen.blit(task.current_sprite, (screen_x, screen_y))
+                
+                # Если задание активно, показываем область взаимодействия
+                if task.status == TaskStatus.ACTIVE:
+                    pygame.draw.circle(screen, (255, 255, 0, 128),
+                                     (int(screen_x + task.width/2),
+                                      int(screen_y + task.height/2)),
+                                     task.interaction_radius, 2)
     
     def draw_tasks_ui(self, screen):
         """
@@ -392,10 +456,15 @@ class TaskManager:
         Returns:
             str: ID задания с которым произошло взаимодействие или None
         """
+        # Используем центр игрока для проверки
+        player_center_x = player_x + player_width / 2
+        player_center_y = player_y + player_height / 2
+        
+        # Проверяем все активные задания
         for task_id in self.active_tasks:
             if task_id in self.tasks:
                 task = self.tasks[task_id]
-                if task.check_collision(player_x, player_y, player_width, player_height):
+                if task.check_interaction(player_center_x, player_center_y):
                     return task_id
         return None
     
@@ -435,3 +504,85 @@ class TaskManager:
                 }
             }
         return None 
+
+    def update(self, delta_time):
+        """
+        Обновление состояния менеджера заданий
+        
+        Args:
+            delta_time (int): Время прошедшее с последнего обновления в миллисекундах
+        """
+        if not self.social_tasks_active and not self.social_warning_active:
+            # Обновляем основной таймер
+            self.social_timer += delta_time
+            if self.social_timer >= self.SOCIAL_TIMER_MAX:
+                print("Активация социальных заданий!")
+                self.activate_social_tasks()
+                self.social_timer = 0
+                self.social_warning_timer = 0
+                self.social_warning_active = True
+        
+        elif self.social_warning_active:
+            # Обновляем таймер предупреждения
+            self.social_warning_timer += delta_time
+            if self.social_warning_timer >= self.SOCIAL_WARNING_MAX:
+                if not self.check_all_social_completed():
+                    print("Время вышло! Задания не выполнены!")
+                    self.trigger_asselya_chase()
+                else:
+                    print("Все социальные задания выполнены вовремя!")
+                self.deactivate_social_tasks()
+    
+    def activate_social_tasks(self):
+        """Активация всех социальных заданий"""
+        for task in self.tasks.values():
+            if task.is_social:
+                task.set_status(TaskStatus.ACTIVE)
+                if task.id not in self.active_tasks:
+                    self.active_tasks.append(task.id)
+        self.social_tasks_active = True
+        print("Социальные задания активированы! У вас есть 30 секунд!")
+    
+    def deactivate_social_tasks(self):
+        """Деактивация всех социальных заданий"""
+        for task in self.tasks.values():
+            if task.is_social:
+                task.set_status(TaskStatus.INACTIVE)
+                if task.id in self.active_tasks:
+                    self.active_tasks.remove(task.id)
+                if task.id in self.completed_tasks:
+                    self.completed_tasks.remove(task.id)
+        self.social_tasks_active = False
+        self.social_warning_active = False
+        print("Социальные задания деактивированы!")
+    
+    def check_all_social_completed(self):
+        """Проверка выполнения всех социальных заданий"""
+        completed = True
+        for task in self.tasks.values():
+            if task.is_social and task.status != TaskStatus.COMPLETED:
+                completed = False
+                print(f"Задание {task.id} не выполнено!")
+        return completed
+    
+    def trigger_asselya_chase(self):
+        """Активация погони Асели"""
+        if self.asselya:
+            self.asselya.start_chase()
+            print("Время вышло! Аселя начинает погоню!")
+        else:
+            print("Ошибка: объект Асели не установлен!")
+        self.social_warning_active = False
+        self.social_tasks_active = False
+    
+    def get_remaining_warning_time(self):
+        """Получение оставшегося времени предупреждения"""
+        if self.social_warning_active:
+            return max(0, (self.SOCIAL_WARNING_MAX - self.social_warning_timer) / 1000)  # в секундах
+        return 0
+    
+    def get_remaining_social_time(self):
+        """Получение оставшегося времени до следующей активации"""
+        if not self.social_tasks_active and not self.social_warning_active:
+            return max(0, (self.SOCIAL_TIMER_MAX - self.social_timer) / 1000)  # в секундах
+        return 0 

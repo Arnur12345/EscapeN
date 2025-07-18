@@ -1,11 +1,11 @@
 import pygame
 import sys
 from constants import (WIDTH, HEIGHT, BG_WIDTH, BG_HEIGHT, FPS, WHITE, LIGHT_RADIUS, DARKNESS_ALPHA,
-                      USERS_COLOR, MONEY_COLOR, BAR_BG_COLOR, BAR_BORDER_COLOR, BLACK, GREEN)
+                      USERS_COLOR, MONEY_COLOR, BAR_BG_COLOR, BAR_BORDER_COLOR, BLACK, GREEN, RED, ORANGE)
 from utils import set_polygon_boundaries
 from camera import Camera
 from character import Character
-# from asselya import Asselya  # Temporarily disabled for safe environment
+from asselya import Asselya  # Temporarily disabled for safe environment
 from npc import NPC
 from task_manager import TaskManager
 
@@ -42,19 +42,15 @@ class Game:
         # Create darkness overlay surface
         self.darkness_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         
-        # Load main background
+        # Load background image
         try:
-            original_bg = pygame.image.load("sprites/bg.png")
-            # Scale background proportionally for 1920x1080 (1.5x scaling)
-            self.background = pygame.transform.scale(original_bg, (BG_WIDTH, BG_HEIGHT))
-            print(f"Main background loaded and scaled: {self.background.get_size()}")
+            self.background = pygame.image.load("sprites/map/map.png")
+            self.background = pygame.transform.scale(self.background, (BG_WIDTH, BG_HEIGHT))
         except pygame.error as e:
-            print(f"Could not load main background: {e}")
-            # Create a simple gradient background as fallback
+            print(f"Ошибка загрузки фона: {e}")
+            # Create a fallback background
             self.background = pygame.Surface((BG_WIDTH, BG_HEIGHT))
-            for y in range(BG_HEIGHT):
-                color_value = int(50 + (y / BG_HEIGHT) * 100)
-                pygame.draw.line(self.background, (color_value, color_value, color_value), (0, y), (BG_WIDTH, y))
+            self.background.fill((50, 50, 50))  # Dark gray
         
         # Load start project image and UI
         try:
@@ -85,10 +81,10 @@ class Game:
             self.startproject_img = None
             self.startgame_window = None
         
-        # Initialize game objects
+        # Create camera
         self.camera = Camera()
         
-        # Create polygon walls from user coordinates (scaled for 1920x1080)
+        # Set polygon boundaries for collision detection
         polygon_coordinates = [
             (0, 1725),      # 0:1150 * 1.5
             (258, 1724),    # 172:1149 * 1.5
@@ -144,8 +140,9 @@ class Game:
         start_y = 1800  # Between the walls
         self.character = Character(start_x, start_y)
         
-        # Create Asselya (following NPC) at her base position - DISABLED
-        # self.asselya = Asselya(3200, 1600, "asselya/standing/")
+        # Create Aselya at her base position
+        self.asselya = Asselya(3200, 1600, "./asselya")  # Исправляем путь к спрайтам
+        self.asselya.is_active = True  # Включаем Аселю
         
         # Create stationary NPC (Bernar) to the left of spawn point
         self.npc = NPC(start_x - 150, start_y, "npc/bernar/bernar", 75, 5)
@@ -155,11 +152,22 @@ class Game:
         
         # Initialize task system
         self.task_manager = TaskManager()
+        self.task_manager.set_asselya(self.asselya)  # Связываем TaskManager с Аселей
         print("Task system initialized")
     
     def check_collision(self):
-        """Check if Asselya caught the player - DISABLED"""
-        # Asselya collision disabled for safe environment
+        """Check if Asselya caught the player"""
+        if not self.asselya.is_chasing:
+            return False
+            
+        # Calculate distance between player and Asselya
+        dx = self.character.world_x - self.asselya.world_x
+        dy = self.character.world_y - self.asselya.world_y
+        distance = (dx * dx + dy * dy) ** 0.5
+        
+        # If Asselya is close enough, game over
+        if distance < 50:  # 50 pixels collision radius
+            return True
         return False
         
     def check_door_collision(self):
@@ -256,13 +264,10 @@ class Game:
         self.character.world_y = start_y
         self.character.is_running = False
         
-        # Reset Asselya position to base - DISABLED
-        # self.asselya.world_x = self.asselya.base_x
-        # self.asselya.world_y = self.asselya.base_y
-        # self.asselya.wait_timer = 0
-        # self.asselya.is_following = False
-        # self.asselya.is_running = False
-        # self.asselya.returning_to_base = False
+        # Reset Aselya
+        self.asselya.world_x = 3200
+        self.asselya.world_y = 1600
+        self.asselya.is_chasing = False
         
         # Reset stationary NPCs positions
         self.npc.world_x = start_x - 150
@@ -404,25 +409,79 @@ class Game:
         """Set exact amount of money"""
         self.money = min(max(amount, 0), self.max_money)
         print(f"Set money to: ${self.money:,}")
-    
+
+    def draw_social_timer(self):
+        """Отрисовка таймера для социальных заданий"""
+        font = pygame.font.Font(None, 36)
+        
+        if self.task_manager.social_warning_active:
+            # Отрисовка таймера предупреждения
+            remaining = self.task_manager.get_remaining_warning_time()
+            text = f"Время на выполнение: {int(remaining)} сек!"
+            color = RED if remaining < 10 else ORANGE
+        else:
+            # Отрисовка таймера до следующей активации
+            remaining = self.task_manager.get_remaining_social_time()
+            text = f"До проверки соц. сетей: {int(remaining)} сек"
+            color = WHITE
+        
+        text_surface = font.render(text, True, color)
+        self.screen.blit(text_surface, (WIDTH - 400, 10))
+
+    def update_asselya(self):
+        """Обновление состояния Асели"""
+        if self.asselya.is_chasing:
+            # Если Аселя в погоне, двигаем её к игроку
+            dx = self.character.world_x - self.asselya.world_x
+            dy = self.character.world_y - self.asselya.world_y
+            distance = (dx * dx + dy * dy) ** 0.5
+            
+            if distance > 0:
+                # Нормализуем вектор движения
+                dx /= distance
+                dy /= distance
+                
+                # Обновляем направление спрайта
+                self.asselya.facing_left = dx < 0
+                
+                # Двигаем Аселю (скорость 1.5x от скорости игрока)
+                self.asselya.world_x += dx * self.character.speed * 1.5
+                self.asselya.world_y += dy * self.character.speed * 1.5
+        else:
+            # Если Аселя не в погоне, она стоит на месте
+            self.asselya.world_x = 3200
+            self.asselya.world_y = 1600
+            
+            # Поворачиваем Аселю к игроку даже когда она стоит
+            dx = self.character.world_x - self.asselya.world_x
+            self.asselya.facing_left = dx < 0
+        
+        # Всегда обновляем анимацию
+        self.asselya.update_animation(self.clock.get_time())
+
     def run(self):
         """Main game loop"""
         running = True
+        
         while running:
-            # Handle events
+            # Get delta time
+            delta_time = self.clock.tick(FPS)
+            
+            # Process events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        if self.show_start_window:
-                            self.show_start_window = False
-                        else:
-                            running = False
+                        running = False
                     elif event.key == pygame.K_r and self.game_over:
                         self.restart_game()
+                    
+                    # Get pressed modifier keys
+                    keys_pressed = pygame.key.get_pressed()
+                    
                     # Test keys for startup metrics (only during gameplay)
-                    elif not self.game_over and not self.show_start_window:
+                    if not self.game_over and not self.show_start_window:
                         # Users control (1-5 keys)
                         if event.key == pygame.K_1:
                             if keys_pressed[pygame.K_LSHIFT] or keys_pressed[pygame.K_RSHIFT]:
@@ -459,15 +518,15 @@ class Game:
                         
                         # Task management keys (F1-F5)
                         elif event.key == pygame.K_F1:
-                            self.task_manager.activate_task("first_users")
+                            self.task_manager.activate_task("1")
                         elif event.key == pygame.K_F2:
-                            self.task_manager.activate_task("find_investor")
+                            self.task_manager.activate_task("2")
                         elif event.key == pygame.K_F3:
-                            self.task_manager.activate_task("hire_developer")
+                            self.task_manager.activate_task("3")
                         elif event.key == pygame.K_F4:
-                            self.task_manager.activate_task("launch_product")
+                            self.task_manager.activate_task("4")
                         elif event.key == pygame.K_F5:
-                            self.task_manager.activate_task("social_media")
+                            self.task_manager.activate_task("5")
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left click
                         if self.check_button_click(event.pos):
@@ -478,14 +537,26 @@ class Game:
             
             # Update game objects only if game is not over and start window is not shown
             if not self.game_over and not self.show_start_window:
+                # Update character
                 self.character.update(keys_pressed)
-                # self.asselya.update(self.character.world_x, self.character.world_y)  # DISABLED
-                self.npc.update()  # Stationary NPC only needs animation update
-                self.bakhredin.update()  # Stationary Bakhredin NPC only needs animation update
+                
+                # Update Aselya
+                self.update_asselya()
+                
+                # Update task manager
+                self.task_manager.update(delta_time)
+                
+                # Update NPCs
+                self.npc.update()
+                self.bakhredin.update()
+                
+                # Update camera
                 self.camera.update(self.character.world_x, self.character.world_y)
                 
-                # Check collision
-                self.check_collision()
+                # Check if Aselya caught the player
+                if self.check_collision():
+                    self.game_over = True
+                    print("Game Over! Аселя поймала вас!")
                 
                 # Check task interactions
                 task_interaction = self.task_manager.check_task_interactions(
@@ -500,105 +571,72 @@ class Game:
                         # Apply rewards to player
                         self.add_users(rewards["users"])
                         self.add_money(rewards["money"])
-                
-                # Check if player is on start project
-                if self.check_startproject_collision():
-                    self.show_start_window = True
-            else:
-                # Increment game over timer for effects
-                self.game_over_timer += 1
             
             # Draw everything
+            self.screen.fill(BLACK)  # Clear screen
+            
             # Draw background with camera offset
             bg_x, bg_y = self.camera.apply(0, 0)
             self.screen.blit(self.background, (bg_x, bg_y))
             
-            # Draw start project image
-            if self.startproject_img:
-                start_x, start_y = self.camera.apply(self.startproject_x, self.startproject_y)
-                self.screen.blit(self.startproject_img, (start_x, start_y))
+            # Debug: Print Aselya's state
+            # print(f"Aselya state: active={self.asselya.is_active}, chasing={self.asselya.is_chasing}, pos=({self.asselya.world_x}, {self.asselya.world_y})")
             
-            # Draw polygon boundaries
-            self.draw_polygon_boundaries(self.screen)
-            
-            # Draw character
-            self.character.draw(self.screen, self.camera)
-            
-            # Draw Asselya (following NPC) - DISABLED
-            # self.asselya.draw(self.screen, self.camera)
-            
-            # Draw stationary NPC (Bernar)
-            self.npc.draw(self.screen, self.camera)
-            
-            # Draw stationary NPC (Bakhredin)
-            self.bakhredin.draw(self.screen, self.camera)
-            
-            # Draw tasks on map
+            # Draw in correct order:
+            # 1. Tasks (including social media)
             self.task_manager.draw_tasks(self.screen, self.camera)
             
-            # Apply horror lighting effect
-            self.apply_horror_lighting()
+            # 2. NPCs
+            self.npc.draw(self.screen, self.camera)
+            self.bakhredin.draw(self.screen, self.camera)
             
-            # Apply flicker effect based on NPC proximity (only if game is not over)
+            # 3. Aselya (make sure she's visible)
+            if self.asselya.is_active:
+                self.asselya.draw(self.screen, self.camera)
+                # Debug: Draw a red rectangle around Aselya's position
+                # screen_x, screen_y = self.camera.apply(self.asselya.world_x, self.asselya.world_y)
+                # pygame.draw.rect(self.screen, (255, 0, 0), 
+                #                (screen_x, screen_y, self.asselya.width, self.asselya.height), 2)
+            
+            # 4. Character (on top)
+            self.character.draw(self.screen, self.camera)
+            
+            # Draw darkness overlay
+            if not self.game_over:
+                self.apply_horror_lighting()
+            
+            # Draw UI elements
             if not self.game_over and not self.show_start_window:
-                self.apply_flicker_effect()
-            
-            # Draw start game window and button if active
-            if self.show_start_window and self.startgame_window:
-                self.screen.blit(self.startgame_window, (0, 0))
-            
-            # Draw UI info (only if game is not over and start window is not shown)
-            if not self.game_over and not self.show_start_window:
-                font = pygame.font.Font(None, 36)
-                info_text = f"Pos: ({int(self.character.world_x)}, {int(self.character.world_y)}) | Main Map"
-                text_surface = font.render(info_text, True, WHITE)
-                self.screen.blit(text_surface, (10, 10))
-                
-                controls_text = "Controls: WASD/Arrows to move, Shift to run, E to complete task, ESC to quit"
-                controls_surface = font.render(controls_text, True, WHITE)
-                self.screen.blit(controls_surface, (10, 50))
-                
-                # Startup metrics controls
-                metrics_text = "Startup: 1-3 Users (Shift to remove), 6-8 Money (Shift to remove)"
-                metrics_surface = font.render(metrics_text, True, (200, 255, 200))
-                self.screen.blit(metrics_surface, (10, 90))
-                
-                # Task controls
-                task_text = "Tasks: F1-F5 to activate tasks"
-                task_surface = font.render(task_text, True, (255, 215, 0))
-                self.screen.blit(task_surface, (10, 130))
-                
-                # Show door info
-                door_collision = self.check_door_collision()
-                door_text = f"Door: ({int(self.door_x1)}, {int(self.door_y)}) to ({int(self.door_x2)}, {int(self.door_y + self.door_height)}) | Collision: {door_collision}"
-                door_surface = font.render(door_text, True, (255, 255, 0) if door_collision else (200, 200, 200))
-                self.screen.blit(door_surface, (10, 170))
-                
-                # Draw startup metrics bars
+                # Draw existing UI elements
                 self.draw_startup_metrics()
-                
-                # Draw tasks UI panel
                 self.task_manager.draw_tasks_ui(self.screen)
+                
+                # Draw social media timer
+                self.draw_social_timer()
+                
+                # Debug: Draw task and timer info
+                font = pygame.font.Font(None, 24)
+                debug_info = [
+                    f"Social tasks active: {self.task_manager.social_tasks_active}",
+                    f"Warning active: {self.task_manager.social_warning_active}",
+                    f"Timer: {self.task_manager.social_timer/1000:.1f}s",
+                    f"Warning timer: {self.task_manager.social_warning_timer/1000:.1f}s"
+                ]
+                for i, text in enumerate(debug_info):
+                    surface = font.render(text, True, (255, 255, 255))
+                    self.screen.blit(surface, (10, 300 + i*20))
             
-            # Draw game over screen if game is over
+            # Draw game over screen if needed
             if self.game_over:
                 self.draw_game_over_screen()
             
-            # Apply fade-in effect
-            if self.fade_alpha > 0:
-                self.fade_alpha -= self.fade_speed
-                if self.fade_alpha < 0:
-                    self.fade_alpha = 0
-                
-                self.fade_surface.set_alpha(self.fade_alpha)
-                self.screen.blit(self.fade_surface, (0, 0))
+            # Draw start window if needed
+            if self.show_start_window:
+                self.screen.blit(self.startgame_window, (0, 0))
             
             # Update display
             pygame.display.flip()
-            
-            # Control frame rate
-            self.clock.tick(FPS)
         
-        # Quit
+        # Quit game
         pygame.quit()
         sys.exit()
