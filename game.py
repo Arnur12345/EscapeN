@@ -8,12 +8,25 @@ from character import Character
 from asselya import Asselya  # Temporarily disabled for safe environment
 from npc import NPC
 from task_manager import TaskManager
+from clickable_character import ClickableCharacter
 
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         pygame.display.set_caption("Escapist Game - Horror Mode")
         self.clock = pygame.time.Clock()
+        
+        # Initialize pygame mixer for sound
+        pygame.mixer.init()
+        
+        # Load and play background music
+        try:
+            pygame.mixer.music.load("song.mp3")
+            pygame.mixer.music.set_volume(0.3)  # Set volume to 30%
+            pygame.mixer.music.play(-1)  # Play indefinitely
+            print("Background music loaded and playing")
+        except pygame.error as e:
+            print(f"Error loading background music: {e}")
         
         # Game state
         self.game_over = False
@@ -149,6 +162,13 @@ class Game:
         
         # Create stationary NPC (Bakhredin) to the right of spawn point
         self.bakhredin = NPC(start_x + 150, start_y, "npc/bakhredin/bahr", 90, 7)
+        
+        # Create clickable character with blink.png sprite near spawn point
+        self.clickable_character = ClickableCharacter(
+            start_x - 80,  # Position to the left of bernar
+            start_y - 20,  # Slightly above spawn point
+            "sprites/blink.png"  # Path to blink.png
+        )
         
         # Initialize task system
         self.task_manager = TaskManager()
@@ -531,6 +551,10 @@ class Game:
                     if event.button == 1:  # Left click
                         if self.check_button_click(event.pos):
                             self.teleport_to_lection()
+                        # Check click on clickable character
+                        elif not self.game_over and not self.show_start_window:
+                            if self.clickable_character.check_click(event.pos, self.camera):
+                                self.clickable_character.on_click()
             
             # Get pressed keys for continuous input
             keys_pressed = pygame.key.get_pressed()
@@ -549,6 +573,9 @@ class Game:
                 # Update NPCs
                 self.npc.update()
                 self.bakhredin.update()
+                
+                # Update clickable character
+                self.clickable_character.update()
                 
                 # Update camera
                 self.camera.update(self.character.world_x, self.character.world_y)
@@ -589,6 +616,9 @@ class Game:
             # 2. NPCs
             self.npc.draw(self.screen, self.camera)
             self.bakhredin.draw(self.screen, self.camera)
+            
+            # 2.5. Clickable Character
+            self.clickable_character.draw(self.screen, self.camera)
             
             # 3. Aselya (make sure she's visible)
             if self.asselya.is_active:
