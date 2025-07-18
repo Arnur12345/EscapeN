@@ -47,6 +47,15 @@ class StartingPage:
         # Button state
         self.button_hovered = False
         
+        # Load and play background music
+        try:
+            pygame.mixer.music.load("song.mp3")
+            pygame.mixer.music.set_volume(0.5)  # Set volume to 50%
+            pygame.mixer.music.play(-1)  # Play indefinitely (-1 means loop forever)
+            print("Background music loaded and started on starting page")
+        except pygame.error as e:
+            print(f"Could not load background music on starting page: {e}")
+        
     def handle_events(self):
         """Handle events for the starting page"""
         for event in pygame.event.get():
